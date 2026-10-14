@@ -13,7 +13,7 @@
 
 Причина: `TicketPanel` не отменял устаревший ответ. `useEffect` всегда вызывал `setTicket` для любого завершившегося запроса. То же происходило с POST сохранения: ответ предыдущей заявки мог перезаписать текущую карточку.
 
-Исправление: флаг `active` для загрузки, `selectedIdRef` для сохранения, показ карточки только если `ticket.id === selectedId`. Список всё равно обновляется через `onChanged`.
+Исправление: поколение запроса. Ответ загрузки или сохранения применяется, только если пользователь не переключил заявку. Повторный клик блокируется ref до ответа. Карточка показывается, только если `ticket.id === selectedId`. Список обновляется через `onChanged` и для устаревшего сохранения.
 
 Проверка: параллельные GET 101 и 102 в `tools/test_api.py`; ручная проверка переключения 101→102 при `DEMO_LATENCY=1`.
 
@@ -41,7 +41,7 @@
 
 Серверные проверки оставлены в `TicketRepository` и маршруте, без нового слоя и без фреймворка. Валидацию `source_id` перенесли после проверки заявки и архива, чтобы соблюсти требуемый порядок. Транзакцию начинаем только после успешных проверок, чтобы `respond()`/`exit` не оставлял открытый `BEGIN` на worker.
 
-На клиенте выбраны cancellation-флаг и ref, а не AbortController: PHP-задержки нужно сохранить, а отмена fetch не обязательна для корректного UI. Оптимистичную блокировку одновременного редактирования не добавляли — это не обязательная часть.
+На клиенте выбран счётчик поколения запроса, а не AbortController: PHP-задержки нужно сохранить, а отмена fetch не обязательна для корректного UI. Оптимистичную блокировку одновременного редактирования не добавляли — это не обязательная часть.
 
 Альтернативы: optimistic concurrency (`updated_at` в POST), AbortController, отдельный middleware авторизации. Для объёма задания это лишнее.
 
@@ -76,12 +76,16 @@ PASS: health
 PASS: no session is 401 json
 PASS: unauthenticated change is 401 json
 PASS: viewer login
+PASS: viewer sees the ticket list
+PASS: viewer sees a null source and history
+PASS: viewer can open an archived ticket
 PASS: editor login
 PASS: ticket without source returns source null (original 500)
 PASS: list keeps null source_name
 PASS: missing ticket is 404 json
 PASS: viewer change is 403 and data is unchanged
 PASS: archived ticket is 403 and data is unchanged
+PASS: archived ticket is rejected before source validation
 PASS: invalid source values are 400 without changes
 PASS: editor change of missing ticket is 404 before source validation
 PASS: viewer is rejected before ticket lookup
@@ -100,4 +104,4 @@ All behaviour checks passed
 
 ## Оставшиеся ограничения
 
-Нет optimistic locking и нет отдельного браузерного автотеста на гонку карточки: её закрывает клиентский guard и ручная проверка с задержками. Снять источник через это действие по-прежнему нельзя — так требуется заданием.
+Нет optimistic locking и нет отдельного браузерного автотеста на гонку карточки: её закрывает счётчик поколения запроса и ручная проверка с задержками. Снять источник через это действие по-прежнему нельзя — так требуется заданием.

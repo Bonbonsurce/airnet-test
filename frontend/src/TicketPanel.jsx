@@ -9,10 +9,12 @@ export default function TicketPanel({ employee, selectedId, sources, onChanged }
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const selectedIdRef = useRef(selectedId);
-  selectedIdRef.current = selectedId;
+  const requestGen = useRef(0);
+  const savingRef = useRef(false);
 
   useEffect(() => {
+    const gen = ++requestGen.current;
+    savingRef.current = false;
     if (!selectedId) {
       setTicket(null);
       setHistory([]);
@@ -23,47 +25,49 @@ export default function TicketPanel({ employee, selectedId, sources, onChanged }
       setMessage('');
       return;
     }
-    let active = true;
     setLoading(true);
     setSaving(false);
     setError('');
     setMessage('');
     api(`/tickets/${selectedId}`).then(data => {
-      if (!active) return;
+      if (requestGen.current !== gen) return;
       setTicket(data.ticket);
       setHistory(data.history);
       setSourceId(String(data.ticket.source?.id ?? ''));
     }).catch(error => {
-      if (active) {
-        setTicket(null);
-        setHistory([]);
-        setError(error.message);
-      }
+      if (requestGen.current !== gen) return;
+      setTicket(null);
+      setHistory([]);
+      setError(error.message);
     }).finally(() => {
-      if (active) setLoading(false);
+      if (requestGen.current === gen) setLoading(false);
     });
-    return () => { active = false; };
   }, [selectedId]);
 
   async function save() {
-    if (!ticket || saving) return;
+    if (!ticket || savingRef.current) return;
     const requestId = ticket.id;
+    const gen = requestGen.current;
+    savingRef.current = true;
     setSaving(true);
     setError('');
     setMessage('');
     try {
       const data = await api(`/tickets/${requestId}/source`, { method: 'POST', body: JSON.stringify({ source_id: Number(sourceId) }) });
       onChanged(data.ticket);
-      if (selectedIdRef.current !== requestId) return;
+      if (requestGen.current !== gen) return;
       setTicket(data.ticket);
       setHistory(data.history);
       setSourceId(String(data.ticket.source?.id ?? ''));
       setMessage('Источник сохранён');
     } catch (error) {
-      if (selectedIdRef.current !== requestId) return;
+      if (requestGen.current !== gen) return;
       setError(error.message);
     } finally {
-      if (selectedIdRef.current === requestId) setSaving(false);
+      if (requestGen.current === gen) {
+        savingRef.current = false;
+        setSaving(false);
+      }
     }
   }
 

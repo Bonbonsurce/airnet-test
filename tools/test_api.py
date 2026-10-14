@@ -66,6 +66,22 @@ def main():
     check('viewer login', status == 200 and data.get('employee', {}).get('role') == 'viewer', data)
     viewer.csrf = data.get('csrf', '')
 
+    status, data = viewer.request('/tickets')
+    viewer_ids = [row.get('id') for row in data.get('tickets', [])] if status == 200 else []
+    check('viewer sees the ticket list', status == 200 and 103 in viewer_ids and 104 in viewer_ids, (status, data))
+    status, data = viewer.request('/tickets/103')
+    check(
+        'viewer sees a null source and history',
+        status == 200 and data.get('ticket', {}).get('source') is None and isinstance(data.get('history'), list),
+        (status, data),
+    )
+    status, data = viewer.request('/tickets/104')
+    check(
+        'viewer can open an archived ticket',
+        status == 200 and data.get('ticket', {}).get('status') == 'archived' and isinstance(data.get('history'), list),
+        (status, data),
+    )
+
     editor = ApiClient()
     status, data = editor.request('/demo/login', {'role': 'editor'})
     check('editor login', status == 200 and data.get('employee', {}).get('role') == 'editor', data)
@@ -102,6 +118,15 @@ def main():
     check(
         'archived ticket is 403 and data is unchanged',
         status == 403 and error_payload(data) and after[1]['ticket']['source']['id'] == 3 and len(after[1]['history']) == len(before[1]['history']),
+        (status, data, after[1]),
+    )
+
+    before = editor.request('/tickets/104')
+    status, data = editor.request('/tickets/104/source', {'source_id': 'nope'})
+    after = editor.request('/tickets/104')
+    check(
+        'archived ticket is rejected before source validation',
+        status == 403 and error_payload(data) and after[1]['ticket']['source']['id'] == before[1]['ticket']['source']['id'] and len(after[1]['history']) == len(before[1]['history']),
         (status, data, after[1]),
     )
 

@@ -9,7 +9,10 @@ set_error_handler(function ($severity, $message, $file, $line) {
 });
 set_exception_handler(function (Throwable $error) {
     error_log((string) $error);
-    respond(500, array('error' => 'internal_error', 'message' => 'Не удалось обработать запрос'));
+    respond(500, array(
+        'error' => 'internal_error',
+        'message' => 'Не удалось обработать запрос',
+    ));
 });
 session_name('assessment_session');
 session_set_cookie_params(array('httponly' => true, 'samesite' => 'Lax', 'path' => '/'));
@@ -37,12 +40,16 @@ function db()
         'user' => getenv('PGUSER') ?: 'assessment',
         'password' => getenv('PGPASSWORD') ?: 'assessment_demo',
     );
-    if ($values['dbname'] !== 'airnet_assessment' || !in_array($values['host'], array('db', 'localhost', '127.0.0.1', '::1'), true)) {
+    $allowedHosts = array('db', 'localhost', '127.0.0.1', '::1');
+    $databaseIsAllowed = $values['dbname'] === 'airnet_assessment';
+    $hostIsAllowed = in_array($values['host'], $allowedHosts, true);
+    if (!$databaseIsAllowed || !$hostIsAllowed) {
         throw new RuntimeException('Only the isolated assessment database is supported');
     }
     $parts = array();
     foreach ($values as $key => $value) {
-        $parts[] = $key . "='" . str_replace(array('\\', "'"), array('\\\\', "\\'"), $value) . "'";
+        $escaped = str_replace(array('\\', "'"), array('\\\\', "\\'"), $value);
+        $parts[] = $key . "='" . $escaped . "'";
     }
     $connection = @pg_connect(implode(' ', $parts) . ' connect_timeout=3');
     if (!$connection) {
@@ -64,14 +71,30 @@ function query($sql, array $params = array())
 function currentEmployee()
 {
     if (empty($_SESSION['employee_id'])) {
-        respond(401, array('error' => 'unauthorized', 'message' => 'Выберите учебного сотрудника'));
+        respond(401, array(
+            'error' => 'unauthorized',
+            'message' => 'Выберите учебного сотрудника',
+        ));
     }
-    $employee = pg_fetch_assoc(query('SELECT id, name, role FROM employees WHERE id=$1', array($_SESSION['employee_id'])));
+    $employee = pg_fetch_assoc(query(
+        'SELECT id, name, role FROM employees WHERE id = $1',
+        array($_SESSION['employee_id'])
+    ));
     if (!$employee) {
-        respond(401, array('error' => 'unauthorized', 'message' => 'Сотрудник не найден'));
+        respond(401, array(
+            'error' => 'unauthorized',
+            'message' => 'Сотрудник не найден',
+        ));
     }
     $employee['id'] = (int) $employee['id'];
-    $employee['permissions'] = array_column(pg_fetch_all(query('SELECT function_name FROM employee_functions WHERE employee_id=$1 ORDER BY function_name', array($employee['id']))) ?: array(), 'function_name');
+    $permissions = pg_fetch_all(query(
+        'SELECT function_name
+         FROM employee_functions
+         WHERE employee_id = $1
+         ORDER BY function_name',
+        array($employee['id'])
+    )) ?: array();
+    $employee['permissions'] = array_column($permissions, 'function_name');
     return $employee;
 }
 
@@ -83,7 +106,10 @@ function permitted(array $employee, $name)
 function requirePermission(array $employee, $name)
 {
     if (!permitted($employee, $name)) {
-        respond(403, array('error' => 'forbidden', 'message' => 'Недостаточно прав'));
+        respond(403, array(
+            'error' => 'forbidden',
+            'message' => 'Недостаточно прав',
+        ));
     }
 }
 
@@ -91,7 +117,10 @@ function requireCsrf()
 {
     $token = isset($_SERVER['HTTP_X_CSRF_TOKEN']) ? $_SERVER['HTTP_X_CSRF_TOKEN'] : '';
     if (empty($_SESSION['csrf']) || !hash_equals($_SESSION['csrf'], $token)) {
-        respond(403, array('error' => 'csrf_invalid', 'message' => 'Обновите страницу'));
+        respond(403, array(
+            'error' => 'csrf_invalid',
+            'message' => 'Обновите страницу',
+        ));
     }
 }
 
@@ -103,7 +132,10 @@ function requestBody()
         respond(400, array('error' => 'invalid_json', 'message' => 'Ожидается JSON'));
     }
     if (!is_array($value)) {
-        respond(400, array('error' => 'invalid_json', 'message' => 'Ожидается JSON-объект'));
+        respond(400, array(
+            'error' => 'invalid_json',
+            'message' => 'Ожидается JSON-объект',
+        ));
     }
     return $value;
 }

@@ -11,7 +11,10 @@ if ($path === '/api/demo/login' && $method === 'POST') {
     $body = requestBody();
     $role = isset($body['role']) ? $body['role'] : '';
     if (!in_array($role, array('viewer', 'editor'), true)) {
-        respond(400, array('error' => 'invalid_role', 'message' => 'Неизвестная учебная роль'));
+        respond(400, array(
+            'error' => 'invalid_role',
+            'message' => 'Неизвестная учебная роль',
+        ));
     }
     $employee = pg_fetch_assoc(query('SELECT id FROM employees WHERE role=$1', array($role)));
     session_regenerate_id(true);
@@ -35,7 +38,10 @@ if ($path === '/api/tickets' && $method === 'GET') {
 if ($path === '/api/sources' && $method === 'GET') {
     respond(200, array('sources' => $repository->sources()));
 }
-if (preg_match('~^/api/tickets/([1-9][0-9]*)$~', $path, $matches) && $method === 'GET') {
+$ticketPath = '~^/api/tickets/([1-9][0-9]*)$~';
+$sourcePath = '~^/api/tickets/([1-9][0-9]*)/source$~';
+
+if ($method === 'GET' && preg_match($ticketPath, $path, $matches)) {
     $id = (int) $matches[1];
     session_write_close();
     if (getenv('DEMO_LATENCY') === '1') {
@@ -43,16 +49,25 @@ if (preg_match('~^/api/tickets/([1-9][0-9]*)$~', $path, $matches) && $method ===
     }
     $ticket = $repository->find($id);
     if (!$ticket) {
-        respond(404, array('error' => 'not_found', 'message' => 'Заявка не найдена'));
+        respond(404, array(
+            'error' => 'not_found',
+            'message' => 'Заявка не найдена',
+        ));
     }
-    respond(200, array('ticket' => $ticket, 'history' => $repository->history($id)));
+    respond(200, array(
+        'ticket' => $ticket,
+        'history' => $repository->history($id),
+    ));
 }
-if (preg_match('~^/api/tickets/([1-9][0-9]*)/source$~', $path, $matches) && $method === 'POST') {
+if ($method === 'POST' && preg_match($sourcePath, $path, $matches)) {
     requireCsrf();
     requirePermission($employee, 'FUNC_TICKETS_SOURCE_EDIT');
     $body = requestBody();
     $sourceId = array_key_exists('source_id', $body) ? $body['source_id'] : null;
     $ticket = $repository->changeSource((int) $matches[1], $sourceId, $employee);
-    respond(200, array('ticket' => $ticket, 'history' => $repository->history($ticket['id'])));
+    respond(200, array(
+        'ticket' => $ticket,
+        'history' => $repository->history($ticket['id']),
+    ));
 }
 respond(404, array('error' => 'not_found', 'message' => 'Маршрут не найден'));

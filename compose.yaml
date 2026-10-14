@@ -41,6 +41,7 @@ services:
       API_TARGET: http://api:8080
     ports:
       - "127.0.0.1:5173:5173"
+      - "[::1]:5173:5173"
     volumes:
       - ./frontend:/app
       - assessment-node-modules:/app/node_modules
